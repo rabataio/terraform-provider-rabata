@@ -1,10 +1,9 @@
-package aws
+package rabata
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"log"
 	"regexp"
 	"strings"
@@ -12,12 +11,13 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func dataSourceAwsS3BucketObject() *schema.Resource {
+func dataSourceRabataS3BucketObject() *schema.Resource {
 	return &schema.Resource{
-		ReadContext: dataSourceAwsS3BucketObjectRead,
+		ReadContext: dataSourceRabataS3BucketObjectRead,
 
 		Schema: map[string]*schema.Schema{
 			"body": {
@@ -81,6 +81,10 @@ func dataSourceAwsS3BucketObject() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 			},
+			"sse_kms_key_id": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
 			"storage_class": {
 				Type:     schema.TypeString,
 				Computed: true,
@@ -94,62 +98,73 @@ func dataSourceAwsS3BucketObject() *schema.Resource {
 	}
 }
 
-func dataSourceAwsS3BucketObjectRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	conn := meta.(*AWSClient).s3conn
+func dataSourceRabataS3BucketObjectRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*AWSClient).s3conn //nolint:forcetypeassert
 
-	bucket := d.Get("bucket").(string)
-	key := d.Get("key").(string)
+	bucket := d.Get("bucket").(string) //nolint:forcetypeassert
+	key := d.Get("key").(string)       //nolint:forcetypeassert
 
 	input := s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	}
+
 	if v, ok := d.GetOk("range"); ok {
-		input.Range = aws.String(v.(string))
+		input.Range = aws.String(v.(string)) //nolint:forcetypeassert
 	}
+
 	if v, ok := d.GetOk("version_id"); ok {
-		input.VersionId = aws.String(v.(string))
+		input.VersionId = aws.String(v.(string)) //nolint:forcetypeassert
 	}
 
 	versionText := ""
-	uniqueId := bucket + "/" + key
+	uniqueID := bucket + "/" + key
+
 	if v, ok := d.GetOk("version_id"); ok {
-		versionText = fmt.Sprintf(" of version %q", v.(string))
-		uniqueId += "@" + v.(string)
+		versionID := v.(string) //nolint:forcetypeassert
+		versionText = fmt.Sprintf(" of version %q", versionID)
+		uniqueID += "@" + versionID
 	}
 
 	log.Printf("[DEBUG] Reading S3 Bucket Object: %s", input)
-	out, err := conn.HeadObject(&input)
+
+	out, err := conn.HeadObjectWithContext(ctx, &input)
 	if err != nil {
-		return diag.FromErr(fmt.Errorf("failed getting S3 object: %s Bucket: %q Object: %q", err, bucket, key))
+		return diag.Errorf("Failed getting S3 object: %s Bucket: %q Object: %q", err, bucket, key)
 	}
+
 	if out.DeleteMarker != nil && *out.DeleteMarker {
-		return diag.FromErr(fmt.Errorf("requested S3 object %q%s has been deleted",
-			bucket+key, versionText))
+		return diag.Errorf("Requested S3 object %q%s has been deleted",
+			bucket+key, versionText)
 	}
 
 	log.Printf("[DEBUG] Received S3 object: %s", out)
 
-	d.SetId(uniqueId)
+	d.SetId(uniqueID)
 
-	d.Set("cache_control", out.CacheControl)
-	d.Set("content_disposition", out.ContentDisposition)
-	d.Set("content_encoding", out.ContentEncoding)
-	d.Set("content_language", out.ContentLanguage)
-	d.Set("content_length", out.ContentLength)
-	d.Set("content_type", out.ContentType)
+	d.Set("cache_control", out.CacheControl)             //nolint:errcheck
+	d.Set("content_disposition", out.ContentDisposition) //nolint:errcheck
+	d.Set("content_encoding", out.ContentEncoding)       //nolint:errcheck
+	d.Set("content_language", out.ContentLanguage)       //nolint:errcheck
+	d.Set("content_length", out.ContentLength)           //nolint:errcheck
+	d.Set("content_type", out.ContentType)               //nolint:errcheck
 	// See https://forums.aws.amazon.com/thread.jspa?threadID=44003
-	d.Set("etag", strings.Trim(*out.ETag, `"`))
-	d.Set("expires", out.Expires)
-	d.Set("last_modified", out.LastModified.Format(time.RFC1123))
-	d.Set("metadata", pointersMapToStringList(out.Metadata))
+	d.Set("etag", strings.Trim(*out.ETag, `"`))                   //nolint:errcheck
+	d.Set("expiration", out.Expiration)                           //nolint:errcheck
+	d.Set("expires", out.Expires)                                 //nolint:errcheck
+	d.Set("last_modified", out.LastModified.Format(time.RFC1123)) //nolint:errcheck
+	d.Set("metadata", pointersMapToStringList(out.Metadata))      //nolint:errcheck
+	d.Set("sse_kms_key_id", out.SSEKMSKeyId)                      //nolint:errcheck
+	d.Set("version_id", out.VersionId)                            //nolint:errcheck
 
 	// The "STANDARD" (which is also the default) storage
 	// class when set would not be included in the results.
-	d.Set("storage_class", s3.StorageClassStandard)
+	storageClass := s3.StorageClassStandard
 	if out.StorageClass != nil {
-		d.Set("storage_class", out.StorageClass)
+		storageClass = *out.StorageClass
 	}
+
+	d.Set("storage_class", storageClass) //nolint:errcheck
 
 	if isContentTypeAllowed(out.ContentType) {
 		input := s3.GetObjectInput{
@@ -157,29 +172,30 @@ func dataSourceAwsS3BucketObjectRead(ctx context.Context, d *schema.ResourceData
 			Key:    aws.String(key),
 		}
 		if v, ok := d.GetOk("range"); ok {
-			input.Range = aws.String(v.(string))
+			input.Range = aws.String(v.(string)) //nolint:forcetypeassert
 		}
+
 		if out.VersionId != nil {
 			input.VersionId = out.VersionId
 		}
-		out, err := conn.GetObject(&input)
+
+		out, err := conn.GetObjectWithContext(ctx, &input)
 		if err != nil {
-			return diag.FromErr(fmt.Errorf("failed getting S3 object: %s", err))
+			return diag.Errorf("Failed getting S3 object: %s", err)
 		}
 
 		buf := new(bytes.Buffer)
+
 		bytesRead, err := buf.ReadFrom(out.Body)
 		if err != nil {
-			return diag.FromErr(fmt.Errorf("failed reading content of S3 object (%s): %s",
-				uniqueId, err))
+			return diag.Errorf("Failed reading content of S3 object (%s): %s",
+				uniqueID, err)
 		}
-		log.Printf("[INFO] Saving %d bytes from S3 object %s", bytesRead, uniqueId)
-		err = d.Set("body", buf.String())
-		if err != nil {
-			return nil
-		}
+
+		log.Printf("[INFO] Saving %d bytes from S3 object %s", bytesRead, uniqueID)
+		d.Set("body", buf.String()) //nolint:errcheck
 	} else {
-		contentType := ""
+		var contentType string
 		if out.ContentType == nil {
 			contentType = "<EMPTY>"
 		} else {
@@ -187,7 +203,7 @@ func dataSourceAwsS3BucketObjectRead(ctx context.Context, d *schema.ResourceData
 		}
 
 		log.Printf("[INFO] Ignoring body of S3 object %s with Content-Type %q",
-			uniqueId, contentType)
+			uniqueID, contentType)
 	}
 
 	return nil

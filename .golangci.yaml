@@ -1,0 +1,104 @@
+run:
+  timeout: 3m
+
+linters:
+  enable:
+    # Common linters
+    - asciicheck
+    - bodyclose
+    - contextcheck
+    - copyloopvar
+    - dupl
+    - errcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - forbidigo
+    - forcetypeassert
+    - gci
+    - gocritic
+    - godot
+    - gofmt
+    - gofumpt
+    - gosimple
+    - govet
+    - inamedparam
+    - ineffassign
+    - intrange
+    - lll
+    - makezero
+    - mirror
+    - misspell
+    - mnd
+    - nakedret
+#    - nestif
+    - nilerr
+    - nlreturn
+    - noctx
+    - nolintlint
+    - nonamedreturns
+    - nosprintfhostport
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - predeclared
+    - promlinter
+    - revive
+    - staticcheck
+    - stylecheck
+    - tagalign
+    - tagliatelle
+    - tenv
+    - testifylint
+    - thelper
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+    - wsl
+    # Project linters
+
+linters-settings:
+  # Common settings
+  gofmt:
+    rewrite-rules:
+      - pattern: 'interface{}'
+        replacement: 'any'
+      - pattern: 'a[b:len(a)]'
+        replacement: 'a[b:]'
+  tagalign:
+    align: false
+    order:
+      - config
+      - json
+      - yaml
+  tagliatelle:
+    case:
+      rules:
+        json: snake
+        yaml: snake
+  unused:
+    field-writes-are-uses: false
+    exported-fields-are-used: false
+    local-variables-are-used: false
+  # Project settings
+
+issues:
+  exclude-rules:
+    # Common rules
+    - path: _test\.go
+      linters:
+        - noctx
+    - linters:
+        - lll
+      source: "^//go:generate"
+    - text: "unused-parameter: parameter 'ctx' seems to be unused, consider removing or renaming it as _"
+      linters:
+        - revive
+    - path: '(.+)_test\.go'
+      text: "unused-parameter: parameter '(.+)' seems to be unused, consider removing or renaming it as _"
+      linters:
+        - revive
+    # Project rules
