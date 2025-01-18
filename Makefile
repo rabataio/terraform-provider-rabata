@@ -1,5 +1,5 @@
 build:
-	go build -v ./...
+	go build -v -o ./bin/terraform-provider-rabata_v0.0.1
 
 generate:
 	go generate ./...
