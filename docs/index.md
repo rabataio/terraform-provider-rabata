@@ -17,36 +17,32 @@ description: |-
 
 ### Required
 
-- `region` (String) The region where Rabata Storage operations will take place. Examples
-are us-east-1, eu-west-1, etc.
+- `region` (String) The region where AWS operations will take place. Examples
+are eu-west-1, us-east-1, etc.
 
 ### Optional
 
 - `access_key` (String) The access key for API operations. You can retrieve this
-from the 'Security & Credentials' section of the Rabata console.
+from the 'Security & Credentials' section of the Rabata.io.
 - `endpoints` (Block Set) (see [below for nested schema](#nestedblock--endpoints))
+- `insecure` (Boolean) Explicitly allow the provider to perform "insecure" SSL requests. If omitted,default value is `false`
 - `max_retries` (Number) The maximum number of times an Rabata API request is
 being executed. If the API request still fails, an error is
 thrown.
 - `profile` (String) The profile for API operations. If not set, the default profile
 created with `aws configure` will be used.
 - `s3_force_path_style` (Boolean) Set this to true to force the request to use path-style addressing,
-i.e., http://s3.amazonaws.com/BUCKET/KEY. By default, the S3 client will
+i.e., http://s3.rcs.rabata.io/BUCKET/KEY. By default, the S3 client will
 use virtual hosted bucket addressing when possible
-(http://BUCKET.s3.amazonaws.com/KEY). Specific to the Amazon S3 service.
+(http://BUCKET.s3.rcs.rabata.io/KEY). Specific to the S3 service.
 - `secret_key` (String) The secret key for API operations. You can retrieve this
-from the 'Security & Credentials' section of the Rabata console.
+from the 'Security & Credentials' section of the Rabata.io.
 - `shared_credentials_file` (String) The path to the shared credentials file. If not set
 this defaults to ~/.aws/credentials.
-- `skip_credentials_validation` (Boolean) Skip the credentials validation via STS API. Used for AWS API implementations that do not have STS available/implemented.
-- `skip_metadata_api_check` (Boolean)
-- `skip_requesting_account_id` (Boolean) Skip requesting the account ID. Used for AWS API implementations that do not have IAM/STS API and/or metadata API.
-- `token` (String) session token. A session token is only required if you are
-using temporary security credentials.
 
 <a id="nestedblock--endpoints"></a>
 ### Nested Schema for `endpoints`
 
 Optional:
 
-- `s3` (String) Use this to override the default service endpoint URL
+- `s3` (String)

@@ -1,8 +1,8 @@
-package aws
+package rabata
 
 import (
-	"RabataTerraformProvider/aws/internal/rabata_endpoints"
 	"context"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -11,7 +11,6 @@ import (
 func Provider() *schema.Provider {
 	// TODO: Move the validation to this, requires conditional schemas
 	// TODO: Move the configuration to this, requires validation
-
 	// The actual provider
 	provider := &schema.Provider{
 		Schema: map[string]*schema.Schema{
@@ -43,13 +42,6 @@ func Provider() *schema.Provider {
 				Description: descriptions["shared_credentials_file"],
 			},
 
-			"token": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Default:     "",
-				Description: descriptions["token"],
-			},
-
 			"region": {
 				Type:         schema.TypeString,
 				Required:     true,
@@ -61,31 +53,17 @@ func Provider() *schema.Provider {
 			"max_retries": {
 				Type:        schema.TypeInt,
 				Optional:    true,
-				Default:     25,
+				Default:     25, //nolint:mnd
 				Description: descriptions["max_retries"],
 			},
 
 			"endpoints": endpointsSchema(),
 
-			"skip_credentials_validation": {
+			"insecure": {
 				Type:        schema.TypeBool,
 				Optional:    true,
-				Default:     true,
-				Description: descriptions["skip_credentials_validation"],
-			},
-
-			"skip_requesting_account_id": {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     true,
-				Description: descriptions["skip_requesting_account_id"],
-			},
-
-			"skip_metadata_api_check": {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     true,
-				Description: descriptions["skip_metadata_api_check"],
+				Default:     false,
+				Description: descriptions["insecure"],
 			},
 
 			"s3_force_path_style": {
@@ -97,46 +75,46 @@ func Provider() *schema.Provider {
 		},
 
 		DataSourcesMap: map[string]*schema.Resource{
-			"rabata_s3_bucket":      dataSourceAwsS3Bucket(),
-			"rabata_bucket_object":  dataSourceAwsS3BucketObject(),
-			"rabata_bucket_objects": dataSourceAwsS3BucketObjects(),
+			"rabata_s3_bucket":         dataSourceRabataS3Bucket(),
+			"rabata_s3_bucket_object":  dataSourceRabataS3BucketObject(),
+			"rabata_s3_bucket_objects": dataSourceRabataS3BucketObjects(),
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
-			"rabata_s3_bucket":     resourceAwsS3Bucket(),
-			"rabata_bucket_object": resourceAwsS3BucketObject(),
+			"rabata_s3_bucket":        resourceRabataS3Bucket(),
+			"rabata_s3_bucket_object": resourceRabataS3BucketObject(),
 		},
 	}
 
-	provider.ConfigureContextFunc = func(ctx context.Context, d *schema.ResourceData) (interface{}, diag.Diagnostics) {
-		var diags diag.Diagnostics
-		config, err := providerConfigure(ctx, d)
-		if err != nil {
-			diags = append(diags, diag.Diagnostic{
-				Severity: diag.Error,
-				Summary:  "Error configuring provider",
-				Detail:   err.Error(),
-			})
-			return nil, diags
+	provider.ConfigureContextFunc = func(ctx context.Context, d *schema.ResourceData) (any, diag.Diagnostics) {
+		terraformVersion := provider.TerraformVersion
+		if terraformVersion == "" {
+			// Terraform 0.12 introduced this field to the protocol
+			// We can therefore assume that if it's missing it's 0.10 or 0.11
+			terraformVersion = "0.11+compatible"
 		}
-		return config, diags
+
+		return providerConfigure(d, terraformVersion)
 	}
+
 	return provider
 }
 
-var descriptions map[string]string
-var endpointServiceNames []string
+var (
+	descriptions         map[string]string
+	endpointServiceNames []string
+)
 
 func init() {
 	descriptions = map[string]string{
-		"region": "The region where Rabata Storage operations will take place. Examples\n" +
-			"are us-east-1, eu-west-1, etc.",
+		"region": "The region where AWS operations will take place. Examples\n" +
+			"are eu-west-1, us-east-1, etc.",
 
 		"access_key": "The access key for API operations. You can retrieve this\n" +
-			"from the 'Security & Credentials' section of the Rabata console.",
+			"from the 'Security & Credentials' section of the Rabata.io.",
 
 		"secret_key": "The secret key for API operations. You can retrieve this\n" +
-			"from the 'Security & Credentials' section of the Rabata console.",
+			"from the 'Security & Credentials' section of the Rabata.io.",
 
 		"profile": "The profile for API operations. If not set, the default profile\n" +
 			"created with `aws configure` will be used.",
@@ -144,28 +122,17 @@ func init() {
 		"shared_credentials_file": "The path to the shared credentials file. If not set\n" +
 			"this defaults to ~/.aws/credentials.",
 
-		"token": "session token. A session token is only required if you are\n" +
-			"using temporary security credentials.",
-
 		"max_retries": "The maximum number of times an Rabata API request is\n" +
 			"being executed. If the API request still fails, an error is\n" +
 			"thrown.",
 
-		"endpoint": "Use this to override the default service endpoint URL",
-
-		"skip_credentials_validation": "Skip the credentials validation via STS API. " +
-			"Used for AWS API implementations that do not have STS available/implemented.",
-
-		"skip_requesting_account_id": "Skip requesting the account ID. " +
-			"Used for AWS API implementations that do not have IAM/STS API and/or metadata API.",
-
-		"skip_medatadata_api_check": "Skip the AWS Metadata API check. " +
-			"Used for AWS API implementations that do not have a metadata api endpoint.",
+		"insecure": "Explicitly allow the provider to perform \"insecure\" SSL requests. If omitted," +
+			"default value is `false`",
 
 		"s3_force_path_style": "Set this to true to force the request to use path-style addressing,\n" +
-			"i.e., http://s3.amazonaws.com/BUCKET/KEY. By default, the S3 client will\n" +
+			"i.e., http://s3.rcs.rabata.io/BUCKET/KEY. By default, the S3 client will\n" +
 			"use virtual hosted bucket addressing when possible\n" +
-			"(http://BUCKET.s3.amazonaws.com/KEY). Specific to the Amazon S3 service.",
+			"(http://BUCKET.s3.rcs.rabata.io/KEY). Specific to the S3 service.",
 	}
 
 	endpointServiceNames = []string{
@@ -173,41 +140,53 @@ func init() {
 	}
 }
 
-func providerConfigure(ctx context.Context, d *schema.ResourceData) (interface{}, error) {
-	region := d.Get("region").(string)
+func getDNSSuffix(region string) string {
+	var regionDNSSuffix string
 
-	endpoint, err := rabata_endpoints.RabataEndpoint(region)
-	if err != nil {
-		return nil, err
+	switch region {
+	case "eu-west-1", "":
+		regionDNSSuffix = "rcs"
+	default:
+		regionDNSSuffix = region
 	}
 
+	return regionDNSSuffix + ".rabata.io"
+}
+
+func providerConfigure(d *schema.ResourceData, terraformVersion string) (any, diag.Diagnostics) {
+	region := d.Get("region").(string) //nolint:forcetypeassert
+
+	//nolint:forcetypeassert
 	config := Config{
 		AccessKey:     d.Get("access_key").(string),
 		SecretKey:     d.Get("secret_key").(string),
 		Profile:       d.Get("profile").(string),
-		Token:         d.Get("token").(string),
 		Region:        region,
 		CredsFilename: d.Get("shared_credentials_file").(string),
 		Endpoints: map[string]string{
-			"s3": "https://s3." + endpoint,
+			"s3": "https://s3." + getDNSSuffix(region),
 		},
-		MaxRetries:              d.Get("max_retries").(int),
-		SkipCredsValidation:     true, //d.Get("skip_credentials_validation").(bool),
-		SkipRequestingAccountId: d.Get("skip_requesting_account_id").(bool),
-		SkipMetadataApiCheck:    d.Get("skip_metadata_api_check").(bool),
-		S3ForcePathStyle:        d.Get("s3_force_path_style").(bool),
+		MaxRetries:       d.Get("max_retries").(int),
+		Insecure:         d.Get("insecure").(bool),
+		S3ForcePathStyle: d.Get("s3_force_path_style").(bool),
+		terraformVersion: terraformVersion,
 	}
 
-	endpointsSet := d.Get("endpoints").(*schema.Set)
+	endpointsSet := d.Get("endpoints").(*schema.Set) //nolint:forcetypeassert
 
 	for _, endpointsSetI := range endpointsSet.List() {
-		endpoints := endpointsSetI.(map[string]interface{})
+		endpoints := endpointsSetI.(map[string]any) //nolint:forcetypeassert
 		for _, endpointServiceName := range endpointServiceNames {
-			config.Endpoints[endpointServiceName] = endpoints[endpointServiceName].(string)
+			config.Endpoints[endpointServiceName] = endpoints[endpointServiceName].(string) //nolint:forcetypeassert
 		}
 	}
 
-	return config.Client()
+	client, err := config.Client()
+	if err != nil {
+		return nil, diag.FromErr(err)
+	}
+
+	return client, nil
 }
 
 func endpointsSchema() *schema.Schema {

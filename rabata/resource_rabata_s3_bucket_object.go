@@ -1,4 +1,4 @@
-package aws
+package rabata
 
 import (
 	"bytes"
@@ -6,28 +6,29 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/mitchellh/go-homedir"
 )
 
-func resourceAwsS3BucketObject() *schema.Resource {
+func resourceRabataS3BucketObject() *schema.Resource {
 	return &schema.Resource{
-		CreateContext: resourceAwsS3BucketObjectCreate,
-		ReadContext:   resourceAwsS3BucketObjectRead,
-		UpdateContext: resourceAwsS3BucketObjectUpdate,
-		DeleteContext: resourceAwsS3BucketObjectDelete,
+		CreateContext: resourceRabataS3BucketObjectCreate,
+		ReadContext:   resourceRabataS3BucketObjectRead,
+		UpdateContext: resourceRabataS3BucketObjectUpdate,
+		DeleteContext: resourceRabataS3BucketObjectDelete,
 
-		CustomizeDiff: resourceAwsS3BucketObjectCustomizeDiff,
+		CustomizeDiff: resourceRabataS3BucketObjectCustomizeDiff,
 
 		Schema: map[string]*schema.Schema{
 			"bucket": {
@@ -148,23 +149,26 @@ func resourceAwsS3BucketObject() *schema.Resource {
 	}
 }
 
-func resourceAwsS3BucketObjectPut(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	s3conn := meta.(*AWSClient).s3conn
+func resourceRabataS3BucketObjectPut(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	s3conn := meta.(*AWSClient).s3conn //nolint:forcetypeassert
 
 	var body io.ReadSeeker
 
-	if v, ok := d.GetOk("source"); ok {
-		source := v.(string)
+	if v, ok := d.GetOk("source"); ok { //nolint:nestif
+		source := v.(string) //nolint:forcetypeassert
+
 		path, err := homedir.Expand(source)
 		if err != nil {
-			return diag.FromErr(fmt.Errorf("error expanding homedir in source (%s): %s", source, err))
+			return diag.Errorf("Error expanding homedir in source (%s): %s", source, err)
 		}
+
 		file, err := os.Open(path)
 		if err != nil {
-			return diag.FromErr(fmt.Errorf("error opening S3 bucket object source (%s): %s", path, err))
+			return diag.Errorf("Error opening S3 bucket object source (%s): %s", path, err)
 		}
 
 		body = file
+
 		defer func() {
 			err := file.Close()
 			if err != nil {
@@ -172,22 +176,24 @@ func resourceAwsS3BucketObjectPut(ctx context.Context, d *schema.ResourceData, m
 			}
 		}()
 	} else if v, ok := d.GetOk("content"); ok {
-		content := v.(string)
+		content := v.(string) //nolint:forcetypeassert
 		body = bytes.NewReader([]byte(content))
 	} else if v, ok := d.GetOk("content_base64"); ok {
-		content := v.(string)
+		content := v.(string) //nolint:forcetypeassert
 		// We can't do streaming decoding here (with base64.NewDecoder) because
 		// the AWS SDK requires an io.ReadSeeker but a base64 decoder can't seek.
 		contentRaw, err := base64.StdEncoding.DecodeString(content)
 		if err != nil {
-			return diag.FromErr(fmt.Errorf("error decoding content_base64: %s", err))
+			return diag.Errorf("error decoding content_base64: %s", err)
 		}
+
 		body = bytes.NewReader(contentRaw)
 	}
 
-	bucket := d.Get("bucket").(string)
-	key := d.Get("key").(string)
+	bucket := d.Get("bucket").(string) //nolint:forcetypeassert
+	key := d.Get("key").(string)       //nolint:forcetypeassert
 
+	//nolint:forcetypeassert
 	putInput := &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -196,89 +202,79 @@ func resourceAwsS3BucketObjectPut(ctx context.Context, d *schema.ResourceData, m
 	}
 
 	if v, ok := d.GetOk("storage_class"); ok {
-		putInput.StorageClass = aws.String(v.(string))
+		putInput.StorageClass = aws.String(v.(string)) //nolint:forcetypeassert
 	}
 
 	if v, ok := d.GetOk("cache_control"); ok {
-		putInput.CacheControl = aws.String(v.(string))
+		putInput.CacheControl = aws.String(v.(string)) //nolint:forcetypeassert
 	}
 
 	if v, ok := d.GetOk("content_type"); ok {
-		putInput.ContentType = aws.String(v.(string))
+		putInput.ContentType = aws.String(v.(string)) //nolint:forcetypeassert
 	}
 
 	if v, ok := d.GetOk("metadata"); ok {
-		putInput.Metadata = stringMapToPointers(v.(map[string]interface{}))
+		putInput.Metadata = stringMapToPointers(v.(map[string]any)) //nolint:forcetypeassert
 	}
 
 	if v, ok := d.GetOk("content_encoding"); ok {
-		putInput.ContentEncoding = aws.String(v.(string))
+		putInput.ContentEncoding = aws.String(v.(string)) //nolint:forcetypeassert
 	}
 
 	if v, ok := d.GetOk("content_language"); ok {
-		putInput.ContentLanguage = aws.String(v.(string))
+		putInput.ContentLanguage = aws.String(v.(string)) //nolint:forcetypeassert
 	}
 
 	if v, ok := d.GetOk("content_disposition"); ok {
-		putInput.ContentDisposition = aws.String(v.(string))
+		putInput.ContentDisposition = aws.String(v.(string)) //nolint:forcetypeassert
 	}
 
-	if _, err := s3conn.PutObject(putInput); err != nil {
-		return diag.FromErr(fmt.Errorf("Error putting object in S3 bucket (%s): %s", bucket, err))
+	if _, err := s3conn.PutObjectWithContext(ctx, putInput); err != nil {
+		return diag.Errorf("Error putting object in S3 bucket (%s): %s", bucket, err)
 	}
 
 	d.SetId(key)
-	return resourceAwsS3BucketObjectRead(ctx, d, meta)
+
+	return resourceRabataS3BucketObjectRead(ctx, d, meta)
 }
 
-func resourceAwsS3BucketObjectCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	return resourceAwsS3BucketObjectPut(ctx, d, meta)
+func resourceRabataS3BucketObjectCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	return resourceRabataS3BucketObjectPut(ctx, d, meta)
 }
 
-func resourceAwsS3BucketObjectRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	s3conn := meta.(*AWSClient).s3conn
+func resourceRabataS3BucketObjectRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	s3conn := meta.(*AWSClient).s3conn //nolint:forcetypeassert
 
-	bucket := d.Get("bucket").(string)
-	key := d.Get("key").(string)
+	bucket := d.Get("bucket").(string) //nolint:forcetypeassert
+	key := d.Get("key").(string)       //nolint:forcetypeassert
 
-	resp, err := s3conn.HeadObject(
+	resp, err := s3conn.HeadObjectWithContext(
+		ctx,
 		&s3.HeadObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    aws.String(key),
-		})
-
+		},
+	)
 	if err != nil {
-		// If S3 returns a 404 Request Failure, mark the object as destroyed
 		var awsErr awserr.RequestFailure
-		if errors.As(err, &awsErr) && awsErr.StatusCode() == 404 {
+		// If S3 returns a 404 Request Failure, mark the object as destroyed
+		if errors.As(err, &awsErr) && awsErr.StatusCode() == http.StatusNotFound {
 			d.SetId("")
 			log.Printf("[WARN] Error Reading Object (%s), object not found (HTTP status 404)", key)
+
 			return nil
 		}
+
 		return diag.FromErr(err)
 	}
+
 	log.Printf("[DEBUG] Reading S3 Bucket Object meta: %s", resp)
 
-	err = d.Set("cache_control", resp.CacheControl)
-	if err != nil {
-		return nil
-	}
-	err = d.Set("content_disposition", resp.ContentDisposition)
-	if err != nil {
-		return nil
-	}
-	err = d.Set("content_encoding", resp.ContentEncoding)
-	if err != nil {
-		return nil
-	}
-	err = d.Set("content_language", resp.ContentLanguage)
-	if err != nil {
-		return nil
-	}
-	err = d.Set("content_type", resp.ContentType)
-	if err != nil {
-		return nil
-	}
+	d.Set("cache_control", resp.CacheControl)             //nolint:errcheck
+	d.Set("content_disposition", resp.ContentDisposition) //nolint:errcheck
+	d.Set("content_encoding", resp.ContentEncoding)       //nolint:errcheck
+	d.Set("content_language", resp.ContentLanguage)       //nolint:errcheck
+	d.Set("content_type", resp.ContentType)               //nolint:errcheck
 	metadata := pointersMapToStringList(resp.Metadata)
 
 	// AWS Go SDK capitalizes metadata, this is a workaround. https://github.com/aws/aws-sdk-go/issues/445
@@ -288,36 +284,27 @@ func resourceAwsS3BucketObjectRead(ctx context.Context, d *schema.ResourceData, 
 	}
 
 	if err := d.Set("metadata", metadata); err != nil {
-		return diag.FromErr(fmt.Errorf("error setting metadata: %s", err))
-	}
-	err = d.Set("version_id", resp.VersionId)
-	if err != nil {
-		return nil
+		return diag.Errorf("error setting metadata: %s", err)
 	}
 
+	d.Set("version_id", resp.VersionId) //nolint:errcheck
+
 	// See https://forums.aws.amazon.com/thread.jspa?threadID=44003
-	err = d.Set("etag", strings.Trim(aws.StringValue(resp.ETag), `"`))
-	if err != nil {
-		return nil
-	}
+	d.Set("etag", strings.Trim(aws.StringValue(resp.ETag), `"`)) //nolint:errcheck
 
 	// The "STANDARD" (which is also the default) storage
 	// class when set would not be included in the results.
-	err = d.Set("storage_class", s3.StorageClassStandard)
-	if err != nil {
-		return nil
-	}
+	storageClass := s3.StorageClassStandard
 	if resp.StorageClass != nil {
-		err := d.Set("storage_class", resp.StorageClass)
-		if err != nil {
-			return nil
-		}
+		storageClass = *resp.StorageClass
 	}
+
+	d.Set("storage_class", storageClass) //nolint:errcheck
 
 	return nil
 }
 
-func resourceAwsS3BucketObjectUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func resourceRabataS3BucketObjectUpdate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
 	// Changes to any of these attributes requires creation of a new object version (if bucket is versioned):
 	for _, key := range []string{
 		"cache_control",
@@ -333,79 +320,96 @@ func resourceAwsS3BucketObjectUpdate(ctx context.Context, d *schema.ResourceData
 		"storage_class",
 	} {
 		if d.HasChange(key) {
-			return resourceAwsS3BucketObjectPut(ctx, d, meta)
+			return resourceRabataS3BucketObjectPut(ctx, d, meta)
 		}
 	}
 
-	conn := meta.(*AWSClient).s3conn
+	conn := meta.(*AWSClient).s3conn //nolint:forcetypeassert
 
-	bucket := d.Get("bucket").(string)
-	key := d.Get("key").(string)
+	bucket := d.Get("bucket").(string) //nolint:forcetypeassert
+	key := d.Get("key").(string)       //nolint:forcetypeassert
 
 	if d.HasChange("acl") {
-		_, err := conn.PutObjectAcl(&s3.PutObjectAclInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(key),
-			ACL:    aws.String(d.Get("acl").(string)),
-		})
+		_, err := conn.PutObjectAclWithContext(
+			ctx,
+			&s3.PutObjectAclInput{
+				Bucket: aws.String(bucket),
+				Key:    aws.String(key),
+				ACL:    aws.String(d.Get("acl").(string)),
+			},
+		)
 		if err != nil {
-			return diag.FromErr(fmt.Errorf("error putting S3 object ACL: %s", err))
+			return diag.Errorf("error putting S3 object ACL: %s", err)
 		}
 	}
 
-	return resourceAwsS3BucketObjectRead(ctx, d, meta)
+	return resourceRabataS3BucketObjectRead(ctx, d, meta)
 }
 
-func resourceAwsS3BucketObjectDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	s3conn := meta.(*AWSClient).s3conn
+func resourceRabataS3BucketObjectDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	s3conn := meta.(*AWSClient).s3conn //nolint:forcetypeassert
 
-	bucket := d.Get("bucket").(string)
-	key := d.Get("key").(string)
+	bucket := d.Get("bucket").(string) //nolint:forcetypeassert
+	key := d.Get("key").(string)       //nolint:forcetypeassert
 	// We are effectively ignoring any leading '/' in the key name as aws.Config.DisableRestProtocolURICleaning is false
 	key = strings.TrimPrefix(key, "/")
 
 	var err error
 	if _, ok := d.GetOk("version_id"); ok {
-		err = deleteAllS3ObjectVersions(s3conn, bucket, key, d.Get("force_destroy").(bool), false)
+		//nolint:forcetypeassert
+		err = deleteAllS3Objects(
+			ctx,
+			s3conn,
+			bucket,
+			key,
+			d.Get("force_destroy").(bool),
+			false,
+		)
 	} else {
-		err = deleteS3ObjectVersion(s3conn, bucket, key, "", false)
+		err = deleteS3ObjectVersion(ctx, s3conn, bucket, key, "", false)
 	}
 
 	if err != nil {
-		return diag.FromErr(fmt.Errorf("error deleting S3 Bucket (%s) Object (%s): %s", bucket, key, err))
+		return diag.Errorf("error deleting S3 Bucket (%s) Object (%s): %s", bucket, key, err)
 	}
 
 	return nil
 }
 
-func validateMetadataIsLowerCase(v interface{}, k string) (ws []string, errors []error) {
-	value := v.(map[string]interface{})
+func validateMetadataIsLowerCase(v any, _ string) ([]string, []error) {
+	value := v.(map[string]any) //nolint:forcetypeassert
+
+	var errs []error
 
 	for k := range value {
 		if k != strings.ToLower(k) {
-			errors = append(errors, fmt.Errorf(
+			errs = append(errs, fmt.Errorf(
 				"metadata must be lowercase only. Offending key: %q", k))
 		}
 	}
-	return
+
+	return nil, errs
 }
 
-func resourceAwsS3BucketObjectCustomizeDiff(_ context.Context, d *schema.ResourceDiff, meta interface{}) error {
+func resourceRabataS3BucketObjectCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ any) error {
 	if d.HasChange("etag") {
-		err := d.SetNewComputed("version_id")
-		if err != nil {
-			return err
-		}
+		d.SetNewComputed("version_id") //nolint:errcheck
 	}
 
 	return nil
 }
 
-// deleteAllS3ObjectVersions deletes all versions of a specified key from an S3 bucket.
-// If key is empty then all versions of all objects are deleted.
+// deleteAllS3Objects deletes key from an S3 bucket.
+// If key is empty then all objects are deleted.
 // Set force to true to override any S3 object lock protections on object lock enabled buckets.
-func deleteAllS3ObjectVersions(conn *s3.S3, bucketName, key string, force, ignoreObjectErrors bool) error {
-	input := &s3.ListObjectVersionsInput{
+func deleteAllS3Objects(
+	ctx context.Context,
+	conn *s3.S3,
+	bucketName, key string,
+	force, ignoreObjectErrors bool,
+) error {
+	// TODO: Replace to ListObjectVersionsInput when implement.
+	input := &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucketName),
 	}
 	if key != "" {
@@ -413,27 +417,31 @@ func deleteAllS3ObjectVersions(conn *s3.S3, bucketName, key string, force, ignor
 	}
 
 	var lastErr error
-	err := conn.ListObjectVersionsPages(input, func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
-		if page == nil {
+
+	err := conn.ListObjectsV2PagesWithContext(
+		ctx,
+		input,
+		func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+			if page == nil {
+				return !lastPage
+			}
+
+			for _, object := range page.Contents {
+				objectKey := aws.StringValue(object.Key)
+
+				if key != "" && key != objectKey {
+					continue
+				}
+
+				err := deleteS3ObjectVersion(ctx, conn, bucketName, objectKey, "", force)
+				if err != nil {
+					lastErr = err
+				}
+			}
+
 			return !lastPage
-		}
-
-		for _, objectVersion := range page.Versions {
-			objectKey := aws.StringValue(objectVersion.Key)
-			objectVersionID := aws.StringValue(objectVersion.VersionId)
-
-			if key != "" && key != objectKey {
-				continue
-			}
-
-			err := deleteS3ObjectVersion(conn, bucketName, objectKey, objectVersionID, force)
-			if err != nil {
-				lastErr = err
-			}
-		}
-
-		return !lastPage
-	})
+		},
+	)
 
 	if isAWSErr(err, s3.ErrCodeNoSuchBucket, "") {
 		err = nil
@@ -445,36 +453,12 @@ func deleteAllS3ObjectVersions(conn *s3.S3, bucketName, key string, force, ignor
 
 	if lastErr != nil {
 		if !ignoreObjectErrors {
-			return fmt.Errorf("error deleting at least one object version, last error: %s", lastErr)
+			return fmt.Errorf("error deleting at least one object version, last error: %w", lastErr)
 		}
 
 		lastErr = nil
 	}
 
-	err = conn.ListObjectVersionsPages(input, func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
-		if page == nil {
-			return !lastPage
-		}
-
-		for _, deleteMarker := range page.DeleteMarkers {
-			deleteMarkerKey := aws.StringValue(deleteMarker.Key)
-			deleteMarkerVersionID := aws.StringValue(deleteMarker.VersionId)
-
-			if key != "" && key != deleteMarkerKey {
-				continue
-			}
-
-			// Delete markers have no object lock protections.
-			err := deleteS3ObjectVersion(conn, bucketName, deleteMarkerKey, deleteMarkerVersionID, false)
-
-			if err != nil {
-				lastErr = err
-			}
-		}
-
-		return !lastPage
-	})
-
 	if isAWSErr(err, s3.ErrCodeNoSuchBucket, "") {
 		err = nil
 	}
@@ -485,7 +469,7 @@ func deleteAllS3ObjectVersions(conn *s3.S3, bucketName, key string, force, ignor
 
 	if lastErr != nil {
 		if !ignoreObjectErrors {
-			return fmt.Errorf("error deleting at least one object delete marker, last error: %s", lastErr)
+			return fmt.Errorf("error deleting at least one object delete marker, last error: %w", lastErr)
 		}
 
 		lastErr = nil
@@ -496,7 +480,7 @@ func deleteAllS3ObjectVersions(conn *s3.S3, bucketName, key string, force, ignor
 
 // deleteS3ObjectVersion deletes a specific bucket object version.
 // Set force to true to override any S3 object lock protections.
-func deleteS3ObjectVersion(conn *s3.S3, b, k, v string, force bool) error {
+func deleteS3ObjectVersion(ctx context.Context, conn *s3.S3, b, k, v string, force bool) error {
 	input := &s3.DeleteObjectInput{
 		Bucket: aws.String(b),
 		Key:    aws.String(k),
@@ -511,8 +495,8 @@ func deleteS3ObjectVersion(conn *s3.S3, b, k, v string, force bool) error {
 	}
 
 	log.Printf("[INFO] Deleting S3 Bucket (%s) Object (%s) Version: %s", b, k, v)
-	_, err := conn.DeleteObject(input)
 
+	_, err := conn.DeleteObjectWithContext(ctx, input)
 	if err != nil {
 		log.Printf("[WARN] Error deleting S3 Bucket (%s) Object (%s) Version (%s): %s", b, k, v, err)
 	}
