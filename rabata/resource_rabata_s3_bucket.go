@@ -383,7 +383,7 @@ func resourceRabataS3BucketGrantsUpdate(ctx context.Context, s3conn *s3.S3, d *s
 	bucket := d.Get("bucket").(string)               //nolint:forcetypeassert
 	rawGrants := d.Get("grant").(*schema.Set).List() //nolint:forcetypeassert
 
-	if len(rawGrants) == 0 {
+	if len(rawGrants) == 0 { //nolint:nestif
 		log.Printf("[DEBUG] S3 bucket: %s, Grants fallback to canned ACL", bucket)
 
 		if err := resourceRabataS3BucketACLUpdate(ctx, s3conn, d); err != nil {

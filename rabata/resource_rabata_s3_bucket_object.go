@@ -154,7 +154,7 @@ func resourceRabataS3BucketObjectPut(ctx context.Context, d *schema.ResourceData
 
 	var body io.ReadSeeker
 
-	if v, ok := d.GetOk("source"); ok {
+	if v, ok := d.GetOk("source"); ok { //nolint:nestif
 		source := v.(string) //nolint:forcetypeassert
 
 		path, err := homedir.Expand(source)

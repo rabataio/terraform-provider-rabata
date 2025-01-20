@@ -166,35 +166,7 @@ func dataSourceRabataS3BucketObjectRead(ctx context.Context, d *schema.ResourceD
 
 	d.Set("storage_class", storageClass) //nolint:errcheck
 
-	if isContentTypeAllowed(out.ContentType) {
-		input := s3.GetObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(key),
-		}
-		if v, ok := d.GetOk("range"); ok {
-			input.Range = aws.String(v.(string)) //nolint:forcetypeassert
-		}
-
-		if out.VersionId != nil {
-			input.VersionId = out.VersionId
-		}
-
-		out, err := conn.GetObjectWithContext(ctx, &input)
-		if err != nil {
-			return diag.Errorf("Failed getting S3 object: %s", err)
-		}
-
-		buf := new(bytes.Buffer)
-
-		bytesRead, err := buf.ReadFrom(out.Body)
-		if err != nil {
-			return diag.Errorf("Failed reading content of S3 object (%s): %s",
-				uniqueID, err)
-		}
-
-		log.Printf("[INFO] Saving %d bytes from S3 object %s", bytesRead, uniqueID)
-		d.Set("body", buf.String()) //nolint:errcheck
-	} else {
+	if !isContentTypeAllowed(out.ContentType) {
 		var contentType string
 		if out.ContentType == nil {
 			contentType = "<EMPTY>"
@@ -204,7 +176,37 @@ func dataSourceRabataS3BucketObjectRead(ctx context.Context, d *schema.ResourceD
 
 		log.Printf("[INFO] Ignoring body of S3 object %s with Content-Type %q",
 			uniqueID, contentType)
+
+		return nil
 	}
+
+	getObjectInput := s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}
+	if v, ok := d.GetOk("range"); ok {
+		getObjectInput.Range = aws.String(v.(string)) //nolint:forcetypeassert
+	}
+
+	if out.VersionId != nil {
+		getObjectInput.VersionId = out.VersionId
+	}
+
+	getObjectOutput, err := conn.GetObjectWithContext(ctx, &getObjectInput)
+	if err != nil {
+		return diag.Errorf("Failed getting S3 object: %s", err)
+	}
+
+	buf := new(bytes.Buffer)
+
+	bytesRead, err := buf.ReadFrom(getObjectOutput.Body)
+	if err != nil {
+		return diag.Errorf("Failed reading content of S3 object (%s): %s",
+			uniqueID, err)
+	}
+
+	log.Printf("[INFO] Saving %d bytes from S3 object %s", bytesRead, uniqueID)
+	d.Set("body", buf.String()) //nolint:errcheck
 
 	return nil
 }
