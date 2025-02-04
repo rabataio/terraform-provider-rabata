@@ -107,7 +107,7 @@ var (
 
 func init() {
 	descriptions = map[string]string{
-		"region": "The region where AWS operations will take place. Examples\n" +
+		"region": "The region where Rabata operations will take place. Examples\n" +
 			"are eu-west-1, us-east-1, etc.",
 
 		"access_key": "The access key for API operations. You can retrieve this\n" +
@@ -130,9 +130,9 @@ func init() {
 			"default value is `false`",
 
 		"s3_force_path_style": "Set this to true to force the request to use path-style addressing,\n" +
-			"i.e., http://s3.rcs.rabata.io/BUCKET/KEY. By default, the S3 client will\n" +
+			"i.e., http://s3.eu-west-1.rabata.io/BUCKET/KEY. By default, the S3 client will\n" +
 			"use virtual hosted bucket addressing when possible\n" +
-			"(http://BUCKET.s3.rcs.rabata.io/KEY). Specific to the S3 service.",
+			"(http://BUCKET.s3.eu-west-1.rabata.io/KEY). Specific to the S3 service.",
 	}
 
 	endpointServiceNames = []string{
@@ -141,16 +141,11 @@ func init() {
 }
 
 func getDNSSuffix(region string) string {
-	var regionDNSSuffix string
-
-	switch region {
-	case "eu-west-1", "":
-		regionDNSSuffix = "rcs"
-	default:
-		regionDNSSuffix = region
+	if region == "" {
+		region = "eu-west-1"
 	}
 
-	return regionDNSSuffix + ".rabata.io"
+	return region + ".rabata.io"
 }
 
 func providerConfigure(d *schema.ResourceData, terraformVersion string) (any, diag.Diagnostics) {
