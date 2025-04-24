@@ -330,6 +330,7 @@ func resourceRabataS3BucketObjectUpdate(ctx context.Context, d *schema.ResourceD
 	key := d.Get("key").(string)       //nolint:forcetypeassert
 
 	if d.HasChange("acl") {
+		//nolint:forcetypeassert
 		_, err := conn.PutObjectAclWithContext(
 			ctx,
 			&s3.PutObjectAclInput{

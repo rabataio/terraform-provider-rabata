@@ -1,7 +1,6 @@
-run:
-  timeout: 3m
-
+version: "2"
 linters:
+  default: none
   enable:
     # Common linters
     - asciicheck
@@ -15,12 +14,8 @@ linters:
     - exhaustive
     - forbidigo
     - forcetypeassert
-    - gci
     - gocritic
     - godot
-    - gofmt
-    - gofumpt
-    - gosimple
     - govet
     - inamedparam
     - ineffassign
@@ -45,60 +40,74 @@ linters:
     - promlinter
     - revive
     - staticcheck
-    - stylecheck
     - tagalign
     - tagliatelle
-    - tenv
     - testifylint
     - thelper
     - unconvert
     - unparam
     - unused
     - usestdlibvars
+    - usetesting
     - wastedassign
     - whitespace
     - wsl
     # Project linters
 
-linters-settings:
-  # Common settings
-  gofmt:
-    rewrite-rules:
-      - pattern: 'interface{}'
-        replacement: 'any'
-      - pattern: 'a[b:len(a)]'
-        replacement: 'a[b:]'
-  tagalign:
-    align: false
-    order:
-      - config
-      - json
-      - yaml
-  tagliatelle:
-    case:
-      rules:
-        json: snake
-        yaml: snake
-  unused:
-    field-writes-are-uses: false
-    exported-fields-are-used: false
-    local-variables-are-used: false
-  # Project settings
+  settings:
+    # Common settings
+    tagalign:
+      align: false
+      order:
+        - config
+        - json
+        - yaml
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: snake
+    unused:
+      field-writes-are-uses: false
+      exported-fields-are-used: false
+      local-variables-are-used: false
+    # Project settings
 
-issues:
-  exclude-rules:
-    # Common rules
-    - path: _test\.go
-      linters:
-        - noctx
-    - linters:
-        - lll
-      source: "^//go:generate"
-    - text: "unused-parameter: parameter 'ctx' seems to be unused, consider removing or renaming it as _"
-      linters:
-        - revive
-    - path: '(.+)_test\.go'
-      text: "unused-parameter: parameter '(.+)' seems to be unused, consider removing or renaming it as _"
-      linters:
-        - revive
-    # Project rules
+  exclusions:
+    generated: strict
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Common rules
+      - linters:
+          - noctx
+        path: _test\.go
+      - linters:
+          - lll
+        source: ^//go:generate
+      - linters:
+          - revive
+        text: 'unused-parameter: parameter ''ctx'' seems to be unused, consider removing or renaming it as _'
+      - linters:
+          - revive
+        path: (.+)_test\.go
+        text: 'unused-parameter: parameter ''(.+)'' seems to be unused, consider removing or renaming it as _'
+      # Project rules
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+  settings:
+    gofmt:
+      rewrite-rules:
+        - pattern: interface{}
+          replacement: any
+        - pattern: a[b:len(a)]
+          replacement: a[b:]
+  exclusions:
+    generated: strict

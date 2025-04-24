@@ -12,3 +12,7 @@ install_tools:
 
 lint:
 	golangci-lint run
+
+format:
+	golangci-lint fmt
+
