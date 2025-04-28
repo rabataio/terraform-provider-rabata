@@ -56,6 +56,10 @@ linters:
 
   settings:
     # Common settings
+    staticcheck:
+      checks:
+        - all
+        - -QF1008
     tagalign:
       align: false
       order:
