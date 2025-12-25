@@ -12,8 +12,10 @@ linters:
     - errname
     - errorlint
     - exhaustive
+    - exptostd
     - forbidigo
     - forcetypeassert
+    - funcorder
     - gocritic
     - godot
     - govet
@@ -25,6 +27,7 @@ linters:
     - mirror
     - misspell
     - mnd
+    - modernize
     - nakedret
     - nestif
     - nilerr
@@ -38,6 +41,7 @@ linters:
     - prealloc
     - predeclared
     - promlinter
+    - recvcheck
     - revive
     - staticcheck
     - tagalign
@@ -51,11 +55,12 @@ linters:
     - usetesting
     - wastedassign
     - whitespace
-    - wsl
+    - wsl_v5
     # Project linters
-
   settings:
     # Common settings
+    funcorder:
+      struct-method: false
     staticcheck:
       checks:
         - all
@@ -76,7 +81,6 @@ linters:
       exported-fields-are-used: false
       local-variables-are-used: false
     # Project settings
-
   exclusions:
     generated: strict
     presets:
@@ -94,11 +98,11 @@ linters:
         source: ^//go:generate
       - linters:
           - revive
-        text: 'unused-parameter: parameter ''ctx'' seems to be unused, consider removing or renaming it as _'
+        text: "unused-parameter: parameter 'ctx' seems to be unused, consider removing or renaming it as _"
       - linters:
           - revive
         path: (.+)_test\.go
-        text: 'unused-parameter: parameter ''(.+)'' seems to be unused, consider removing or renaming it as _'
+        text: "unused-parameter: parameter '(.+)' seems to be unused, consider removing or renaming it as _"
       # Project rules
 
 formatters:
