@@ -8,6 +8,7 @@ import (
 
 func isResourceTimeoutError(err error) bool {
 	var timeoutErr *retry.TimeoutError
+
 	ok := errors.As(err, &timeoutErr)
 
 	return ok && timeoutErr.LastError == nil

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -306,7 +307,7 @@ func resourceRabataS3BucketObjectRead(ctx context.Context, d *schema.ResourceDat
 
 func resourceRabataS3BucketObjectUpdate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
 	// Changes to any of these attributes requires creation of a new object version (if bucket is versioned):
-	for _, key := range []string{
+	attributes := []string{
 		"cache_control",
 		"content_base64",
 		"content_disposition",
@@ -318,10 +319,10 @@ func resourceRabataS3BucketObjectUpdate(ctx context.Context, d *schema.ResourceD
 		"metadata",
 		"source",
 		"storage_class",
-	} {
-		if d.HasChange(key) {
-			return resourceRabataS3BucketObjectPut(ctx, d, meta)
-		}
+	}
+
+	if slices.ContainsFunc(attributes, d.HasChange) {
+		return resourceRabataS3BucketObjectPut(ctx, d, meta)
 	}
 
 	conn := meta.(*AWSClient).s3conn //nolint:forcetypeassert
