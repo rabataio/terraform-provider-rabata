@@ -65,6 +65,8 @@ linters:
       checks:
         - all
         - -QF1008
+        # Project settings
+        - -SA1019
     tagalign:
       align: false
       order:
