@@ -65,8 +65,6 @@ linters:
       checks:
         - all
         - -QF1008
-        # Project settings
-        - -SA1019
     tagalign:
       align: false
       order:
@@ -106,7 +104,9 @@ linters:
         path: (.+)_test\.go
         text: "unused-parameter: parameter '(.+)' seems to be unused, consider removing or renaming it as _"
       # Project rules
-
+      - linters:
+          - staticcheck
+        text: 'SA1019: "github.com/aws/aws-sdk-go(.*)" is deprecated: aws-sdk-go is deprecated. Use aws-sdk-go-v2.'
 formatters:
   enable:
     - gci
